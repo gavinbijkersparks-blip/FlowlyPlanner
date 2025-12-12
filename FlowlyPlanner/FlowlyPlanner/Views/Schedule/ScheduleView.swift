@@ -3,8 +3,9 @@ import SwiftData
 
 struct ScheduleView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Lesson.weekday) private var lessons: [Lesson]
+    @Query(sort: [SortDescriptor(\Lesson.weekday), SortDescriptor(\Lesson.startTime)]) private var lessons: [Lesson]
     @State private var showingAdd = false
+    @State private var showingImport = false
 
     var body: some View {
         List {
@@ -36,12 +37,20 @@ struct ScheduleView: View {
         }
         .navigationTitle("Rooster")
         .toolbar {
-            Button(action: { showingAdd = true }) {
-                Label("Les", systemImage: "plus")
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button(action: { showingImport = true }) {
+                    Label("Scan", systemImage: "camera.viewfinder")
+                }
+                Button(action: { showingAdd = true }) {
+                    Label("Les", systemImage: "plus")
+                }
             }
         }
         .sheet(isPresented: $showingAdd) {
             AddLessonView()
+        }
+        .sheet(isPresented: $showingImport) {
+            ScheduleImportView()
         }
     }
 

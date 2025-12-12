@@ -20,7 +20,7 @@ final class PlannerService {
         exams: [ExamPreparation]
     ) -> PlannerResult {
         let weekStart = startOfWeek()
-        var availability = buildInitialAvailability(profile: profile, weekStart: weekStart)
+        var availability = buildInitialAvailability(profile: profile, weekStart: weekStart, lessons: lessons)
         // Block lessons
         for lesson in lessons {
             guard let date = calendar.date(byAdding: .day, value: lesson.day.rawValue, to: weekStart) else { continue }
@@ -123,18 +123,36 @@ final class PlannerService {
         return Weekday(rawValue: max(0, min(6, diff))) ?? .monday
     }
 
-    private func buildInitialAvailability(profile: ChildProfile, weekStart: Date) -> [Weekday: [DateInterval]] {
+    private func buildInitialAvailability(profile: ChildProfile, weekStart: Date, lessons: [Lesson]) -> [Weekday: [DateInterval]] {
         var availability: [Weekday: [DateInterval]] = [:]
         let bedtimeComponents = calendar.dateComponents([.hour, .minute], from: profile.bedtime)
+        let lessonsByDay = Dictionary(grouping: lessons, by: { $0.day })
+
         for day in Weekday.allCases {
             let isSchoolDay = profile.schoolDays.contains(day)
-            let startComponents = DateComponents(hour: isSchoolDay ? 7 : 9, minute: isSchoolDay ? 30 : 0)
+            let dayLessons = lessonsByDay[day] ?? []
+
+            // Start na laatste les of minimaal 16:00 op schooldagen, anders 09:00
+            let defaultSchoolStart = timeOfDay(hour: 16, minute: 0, on: weekStart, dayOffset: day.rawValue)
+            let lastLessonEnd = dayLessons
+                .map { combine(time: $0.endTime, with: calendar.date(byAdding: .day, value: day.rawValue, to: weekStart) ?? weekStart) }
+                .max()
+            let startDate: Date
+            if isSchoolDay {
+                startDate = max(lastLessonEnd ?? defaultSchoolStart, defaultSchoolStart)
+            } else {
+                startDate = timeOfDay(hour: 9, minute: 0, on: weekStart, dayOffset: day.rawValue)
+            }
+
             guard
                 let baseDate = calendar.date(byAdding: .day, value: day.rawValue, to: weekStart),
-                let dayStart = calendar.date(bySettingHour: startComponents.hour ?? 7, minute: startComponents.minute ?? 0, second: 0, of: baseDate),
                 let dayEnd = calendar.date(bySettingHour: bedtimeComponents.hour ?? 21, minute: bedtimeComponents.minute ?? 0, second: 0, of: baseDate)
             else { continue }
-            availability[day] = [DateInterval(start: dayStart, end: dayEnd)]
+            if startDate < dayEnd {
+                availability[day] = [DateInterval(start: startDate, end: dayEnd)]
+            } else {
+                availability[day] = []
+            }
         }
         return availability
     }
@@ -142,6 +160,11 @@ final class PlannerService {
     private func combine(time: Date, with day: Date) -> Date {
         let components = calendar.dateComponents([.hour, .minute], from: time)
         return calendar.date(bySettingHour: components.hour ?? 0, minute: components.minute ?? 0, second: 0, of: day) ?? day
+    }
+
+    private func timeOfDay(hour: Int, minute: Int, on weekStart: Date, dayOffset: Int) -> Date {
+        let baseDate = calendar.date(byAdding: .day, value: dayOffset, to: weekStart) ?? weekStart
+        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: baseDate) ?? baseDate
     }
 
     private func placeBlock(durationMinutes: Int, on intervals: inout [DateInterval]) -> DateInterval? {
