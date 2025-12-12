@@ -91,7 +91,7 @@ struct PlannerView: View {
                                 Spacer()
                             }
                             .padding(8)
-                            .background { background(for: event) }
+                            .background(background(for: event))
                             .cornerRadius(12)
                         }
                     }
@@ -229,7 +229,6 @@ struct PlannerView: View {
         .padding(.horizontal)
     }
 
-    @ViewBuilder
     private func icon(for event: PlanEvent) -> some View {
         let symbol: String
         let color: Color
@@ -250,13 +249,12 @@ struct PlannerView: View {
             symbol = "cup.and.saucer.fill"
             color = .mint
         }
-        Image(systemName: symbol)
+        return Image(systemName: symbol)
             .foregroundStyle(color)
             .font(.title3)
     }
 
-    @ViewBuilder
-    private func background(for event: PlanEvent) -> some View {
+    private func background(for event: PlanEvent) -> Color {
         switch event.kind {
         case .exam:
             Color.green.opacity(0.15)
