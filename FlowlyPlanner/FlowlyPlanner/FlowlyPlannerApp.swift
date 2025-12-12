@@ -1,10 +1,3 @@
-//
-//  FlowlyPlannerApp.swift
-//  FlowlyPlanner
-//
-//  Created by Gavin Sparks on 12/12/2025.
-//
-
 import SwiftUI
 import SwiftData
 
@@ -12,7 +5,10 @@ import SwiftData
 struct FlowlyPlannerApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            ChildProfile.self,
+            Lesson.self,
+            HomeworkTask.self,
+            ExamPreparation.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
