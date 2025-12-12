@@ -103,6 +103,13 @@ final class PlannerService {
             events.append(PlanEvent(id: UUID(), title: "Les – \(lesson.subject)", start: start, end: end, kind: .lesson))
         }
 
+        // Add exam events for display (1 uur blok op examDate)
+        for exam in exams {
+            let start = exam.examDate
+            let end = calendar.date(byAdding: .minute, value: 60, to: start) ?? start.addingTimeInterval(3600)
+            events.append(PlanEvent(id: UUID(), title: "Toets – \(exam.subject)", start: start, end: end, kind: .exam))
+        }
+
         let sortedEvents = events.sorted { $0.start < $1.start }
         return PlannerResult(plan: WeekPlan(weekStart: weekStart, events: sortedEvents, unplanned: unplanned))
     }

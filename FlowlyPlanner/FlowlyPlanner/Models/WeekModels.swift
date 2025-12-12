@@ -94,7 +94,7 @@ final class ExamPreparation {
 }
 
 struct PlanEvent: Identifiable {
-    enum Kind { case lesson, homework, study, breakTime }
+    enum Kind { case lesson, homework, study, breakTime, exam }
     let id: UUID
     let title: String
     let start: Date

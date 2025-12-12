@@ -70,20 +70,29 @@ struct PlannerView: View {
     private func planList(_ plan: WeekPlan) -> some View {
         List {
             ForEach(Weekday.allCases) { day in
-                let dayEvents = plan.events.filter { weekday(for: $0.start) == day }
+                let dayEvents = plan.events
+                    .filter { weekday(for: $0.start) == day }
+                    .filter { $0.kind != .lesson } // Toon alleen huiswerk/studie/toets, geen lessen
                 Section(header: Text(day.label)) {
                     if dayEvents.isEmpty {
                         Text("Geen blokken")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(dayEvents) { event in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(event.title)
-                                    .font(.headline)
-                                Text("\(timeString(event.start)) – \(timeString(event.end))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                            HStack(spacing: 12) {
+                                icon(for: event)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(event.title)
+                                        .font(.headline)
+                                    Text("\(timeString(event.start)) – \(timeString(event.end))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
                             }
+                            .padding(8)
+                            .background { background(for: event) }
+                            .cornerRadius(12)
                         }
                     }
                 }
@@ -218,6 +227,48 @@ struct PlannerView: View {
             }
         }
         .padding(.horizontal)
+    }
+
+    @ViewBuilder
+    private func icon(for event: PlanEvent) -> some View {
+        let symbol: String
+        let color: Color
+        switch event.kind {
+        case .homework:
+            symbol = "doc.text"
+            color = .blue
+        case .study:
+            symbol = "brain.head.profile"
+            color = .orange
+        case .exam:
+            symbol = "checkmark.seal.fill"
+            color = .green
+        case .lesson:
+            symbol = "book"
+            color = .gray
+        case .breakTime:
+            symbol = "cup.and.saucer.fill"
+            color = .mint
+        }
+        Image(systemName: symbol)
+            .foregroundStyle(color)
+            .font(.title3)
+    }
+
+    @ViewBuilder
+    private func background(for event: PlanEvent) -> some View {
+        switch event.kind {
+        case .exam:
+            Color.green.opacity(0.15)
+        case .homework:
+            Color.blue.opacity(0.12)
+        case .study:
+            Color.orange.opacity(0.12)
+        case .breakTime:
+            Color.mint.opacity(0.12)
+        default:
+            Color.secondary.opacity(0.08)
+        }
     }
 }
 

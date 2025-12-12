@@ -68,10 +68,10 @@ final class AIPlannerService {
             return PlanEvent(id: UUID(), title: event.title, start: startDate, end: endDate, kind: kind)
         }
 
-        // Filter: verwijder AI-lessen (kind=lesson) of events die exact over lessen heen vallen; behoud alle andere (ook als titel lijkt op een vak)
+        // Filter: verwijder AI-lessen (kind=lesson) of events (behalve examens) die exact over lessen heen vallen; behoud alle andere
         let studyEvents = events.filter { event in
             if event.kind == .lesson { return false }
-            if overlapsLesson(event, lessons: lessons) { return false }
+            if event.kind != .exam && overlapsLesson(event, lessons: lessons) { return false }
             return true
         }
 
@@ -144,6 +144,7 @@ final class AIPlannerService {
         case "lesson", "les": return .lesson
         case "homework": return .homework
         case "study": return .study
+        case "exam", "toets": return .exam
         case "break": return .breakTime
         default: return .study
         }
