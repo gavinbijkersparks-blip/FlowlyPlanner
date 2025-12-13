@@ -52,12 +52,14 @@ final class Lesson {
     var weekday: Int
     var startTime: Date
     var endTime: Date
+    var profile: ChildProfile?
 
-    init(subject: String, weekday: Weekday, startTime: Date, endTime: Date) {
+    init(subject: String, weekday: Weekday, startTime: Date, endTime: Date, profile: ChildProfile? = nil) {
         self.subject = subject
         self.weekday = weekday.rawValue
         self.startTime = startTime
         self.endTime = endTime
+        self.profile = profile
     }
 
     var day: Weekday { Weekday(rawValue: weekday) ?? .monday }
@@ -69,12 +71,14 @@ final class HomeworkTask {
     var subject: String
     var deadline: Date
     var estimatedMinutes: Int
+    var profile: ChildProfile?
 
-    init(title: String, subject: String, deadline: Date, estimatedMinutes: Int) {
+    init(title: String, subject: String, deadline: Date, estimatedMinutes: Int, profile: ChildProfile? = nil) {
         self.title = title
         self.subject = subject
         self.deadline = deadline
         self.estimatedMinutes = estimatedMinutes
+        self.profile = profile
     }
 }
 
@@ -84,17 +88,19 @@ final class ExamPreparation {
     var examDate: Date
     var blocksNeeded: Int
     var blockDurationMinutes: Int
+    var profile: ChildProfile?
 
-    init(subject: String, examDate: Date, blocksNeeded: Int, blockDurationMinutes: Int) {
+    init(subject: String, examDate: Date, blocksNeeded: Int, blockDurationMinutes: Int, profile: ChildProfile? = nil) {
         self.subject = subject
         self.examDate = examDate
         self.blocksNeeded = blocksNeeded
         self.blockDurationMinutes = blockDurationMinutes
+        self.profile = profile
     }
 }
 
 struct PlanEvent: Identifiable {
-    enum Kind { case lesson, homework, study, breakTime, exam }
+    enum Kind { case lesson, homework, homeworkDue, study, breakTime, exam }
     let id: UUID
     let title: String
     let start: Date

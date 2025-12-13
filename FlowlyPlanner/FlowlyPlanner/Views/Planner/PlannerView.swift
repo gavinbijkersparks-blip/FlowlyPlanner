@@ -4,6 +4,7 @@ import UIKit
 
 struct PlannerView: View {
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var profileStore: ProfileSelectionStore
     @Query private var profiles: [ChildProfile]
     @Query(sort: \Lesson.weekday) private var lessons: [Lesson]
     @Query private var homework: [HomeworkTask]
@@ -22,8 +23,34 @@ struct PlannerView: View {
     private let aiPlannerService = AIPlannerService()
     private let exporter = ICSExporter()
 
+    private var activeProfile: ChildProfile? {
+        guard let id = profileStore.selectedProfileID else { return nil }
+        return profiles.first(where: { $0.persistentModelID == id })
+    }
+
+    private var filteredLessons: [Lesson] {
+        guard let id = profileStore.selectedProfileID else { return lessons }
+        return lessons.filter { $0.profile?.persistentModelID == id || $0.profile == nil }
+    }
+    private var filteredHomework: [HomeworkTask] {
+        guard let id = profileStore.selectedProfileID else { return homework }
+        return homework.filter { $0.profile?.persistentModelID == id || $0.profile == nil }
+    }
+    private var filteredExams: [ExamPreparation] {
+        guard let id = profileStore.selectedProfileID else { return exams }
+        return exams.filter { $0.profile?.persistentModelID == id || $0.profile == nil }
+    }
+
     var body: some View {
         VStack {
+            if let profile = activeProfile {
+                profileChip(profile)
+            } else {
+                Text("Selecteer een profiel via het avatar-overzicht.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+            }
             settingsRow
             debugInfo
             if let plan = weekPlan {
@@ -44,18 +71,27 @@ struct PlannerView: View {
         }
         .navigationTitle("Planner")
         .toolbar {
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    generatePlan()
-                } label: {
-                    if isGenerating {
-                        ProgressView()
-                    } else {
-                        Text("Genereer")
-                    }
+            ToolbarItem(placement: .navigationBarLeading) {
+                NavigationLink(destination: ProfileView()) {
+                    Image(systemName: "person.crop.circle")
                 }
-                if weekPlan != nil {
-                    Button("Export .ics", action: exportPlan)
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button {
+                        generatePlan()
+                    } label: {
+                        if isGenerating {
+                            Label("Bezig…", systemImage: "hourglass")
+                        } else {
+                            Label("Genereer", systemImage: "sparkles")
+                        }
+                    }
+                    if weekPlan != nil {
+                        Button("Export .ics", action: exportPlan)
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
         }
@@ -69,11 +105,11 @@ struct PlannerView: View {
     @ViewBuilder
     private func planList(_ plan: WeekPlan) -> some View {
         List {
-            ForEach(Weekday.allCases) { day in
+            ForEach(upcomingDays(), id: \.self) { day in
                 let dayEvents = plan.events
-                    .filter { weekday(for: $0.start) == day }
+                    .filter { Calendar.current.isDate($0.start, inSameDayAs: day) }
                     .filter { $0.kind != .lesson } // Toon alleen huiswerk/studie/toets, geen lessen
-                Section(header: Text(day.label)) {
+                Section(header: Text(dateLabel(for: day))) {
                     if dayEvents.isEmpty {
                         Text("Geen blokken")
                             .foregroundStyle(.secondary)
@@ -112,6 +148,10 @@ struct PlannerView: View {
             warning = "Maak eerst een kindprofiel"
             return
         }
+        guard let activeProfile = activeProfile else {
+            warning = "Selecteer een profiel via het avatar-overzicht"
+            return
+        }
         warning = nil
         isGenerating = true
 
@@ -119,10 +159,10 @@ struct PlannerView: View {
             Task {
                 do {
                     let result = try await aiPlannerService.generatePlan(
-                        profile: profile,
-                        lessons: lessons,
-                        homeworkTasks: homework,
-                        exams: exams,
+                        profile: activeProfile,
+                        lessons: filteredLessons,
+                        homeworkTasks: filteredHomework,
+                        exams: filteredExams,
                         endpoint: aiEndpoint
                     )
                     await MainActor.run {
@@ -151,7 +191,7 @@ struct PlannerView: View {
                 }
             }
         } else {
-            let result = plannerService.generatePlan(profile: profile, lessons: lessons, homeworkTasks: homework, exams: exams)
+            let result = plannerService.generatePlan(profile: activeProfile, lessons: filteredLessons, homeworkTasks: filteredHomework, exams: filteredExams)
             weekPlan = result.plan
             isGenerating = false
             aiPlanUsed = false
@@ -183,19 +223,6 @@ struct PlannerView: View {
         return formatter.string(from: date)
     }
 
-    private func weekday(for date: Date) -> Weekday {
-        let wd = Calendar.current.component(.weekday, from: date) // 1=Sunday ... 7=Saturday
-        switch wd {
-        case 2: return .monday
-        case 3: return .tuesday
-        case 4: return .wednesday
-        case 5: return .thursday
-        case 6: return .friday
-        case 7: return .saturday
-        default: return .sunday
-        }
-    }
-
     private var settingsRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle("Gebruik AI planner", isOn: $useAIPlanner)
@@ -217,10 +244,10 @@ struct PlannerView: View {
     // Kleine debug-info om te zien wat er beschikbaar is bij het plannen
     private var debugInfo: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Lessen: \(lessons.count)  |  Huiswerk: \(homework.count)  |  Toetsen: \(exams.count)")
+            Text("Lessen: \(filteredLessons.count)  |  Huiswerk: \(filteredHomework.count)  |  Toetsen: \(filteredExams.count)")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-            if homework.isEmpty && exams.isEmpty {
+            if filteredHomework.isEmpty && filteredExams.isEmpty {
                 Text("Geen huiswerk/toetsen aanwezig om in te plannen.")
                     .font(.footnote)
                     .foregroundStyle(.orange)
@@ -236,6 +263,9 @@ struct PlannerView: View {
         case .homework:
             symbol = "doc.text"
             color = .blue
+        case .homeworkDue:
+            symbol = "tray.and.arrow.up.fill"
+            color = .green
         case .study:
             symbol = "brain.head.profile"
             color = .orange
@@ -260,6 +290,8 @@ struct PlannerView: View {
             Color.green.opacity(0.15)
         case .homework:
             Color.blue.opacity(0.12)
+        case .homeworkDue:
+            Color.green.opacity(0.18)
         case .study:
             Color.orange.opacity(0.12)
         case .breakTime:
@@ -267,6 +299,47 @@ struct PlannerView: View {
         default:
             Color.secondary.opacity(0.08)
         }
+    }
+
+    // Helpers voor weergave
+    private func upcomingDays() -> [Date] {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date())
+        return (0..<30).compactMap { offset in
+            cal.date(byAdding: .day, value: offset, to: start)
+        }
+    }
+
+    private func dateLabel(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "nl_NL")
+        formatter.dateFormat = "EEE dd MMM"
+        return formatter.string(from: date)
+    }
+
+    @ViewBuilder
+    private func profileChip(_ profile: ChildProfile) -> some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color.accentColor.opacity(0.2))
+                .frame(width: 36, height: 36)
+                .overlay(Text(initials(for: profile.name)).font(.headline))
+            Text(profile.name.isEmpty ? "Naamloos" : profile.name)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal)
+    }
+
+    private func initials(for name: String) -> String {
+        let parts = name.split(separator: " ")
+        if let first = parts.first?.first {
+            if let last = parts.dropFirst().first?.first {
+                return "\(first)\(last)"
+            }
+            return "\(first)"
+        }
+        return "?"
     }
 }
 

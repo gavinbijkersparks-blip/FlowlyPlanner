@@ -38,6 +38,8 @@ final class PlannerService {
         for task in sortedHomework {
             var remaining = task.estimatedMinutes
             var currentDate = min(task.deadline, endOfWeek(for: weekStart))
+            let deadlineLabel = formatDate(task.deadline)
+            let makeTitle = "Maken - \(task.subject) huiswerk • klaar: \(deadlineLabel)"
             while remaining > 0, currentDate >= weekStart {
                 let day = weekday(for: currentDate)
                 if perDayMinutes[day, default: 0] >= profile.maxStudyMinutesPerDay {
@@ -49,7 +51,7 @@ final class PlannerService {
                     availability[day] = windows
                     events.append(PlanEvent(
                         id: UUID(),
-                        title: "Huiswerk – \(task.subject)",
+                        title: makeTitle,
                         start: slot.start,
                         end: slot.end,
                         kind: .homework
@@ -63,6 +65,16 @@ final class PlannerService {
             if remaining > 0 {
                 unplanned.append(task.title)
             }
+
+            // Voeg een visuele inlevermarkering toe op deadline (5 min blok)
+            let dueEnd = calendar.date(byAdding: .minute, value: 5, to: task.deadline) ?? task.deadline
+            events.append(PlanEvent(
+                id: UUID(),
+                title: "Inleveren - \(task.subject) huiswerk",
+                start: task.deadline,
+                end: dueEnd,
+                kind: .homeworkDue
+            ))
         }
 
         // Place exam prep blocks spread backwards from exam date
@@ -213,5 +225,12 @@ final class PlannerService {
             }
         }
         return updated.sorted { $0.start < $1.start }
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "nl_NL")
+        formatter.dateFormat = "E d MMM"
+        return formatter.string(from: date)
     }
 }

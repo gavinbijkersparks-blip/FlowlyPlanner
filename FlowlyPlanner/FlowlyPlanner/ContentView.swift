@@ -2,10 +2,9 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @StateObject private var profileStore = ProfileSelectionStore()
     var body: some View {
         TabView {
-            NavigationStack { ProfileView() }
-                .tabItem { Label("Profiel", systemImage: "person.crop.circle") }
             NavigationStack { ScheduleView() }
                 .tabItem { Label("Rooster", systemImage: "calendar") }
             NavigationStack { TasksView() }
@@ -13,6 +12,7 @@ struct ContentView: View {
             NavigationStack { PlannerView() }
                 .tabItem { Label("Planner", systemImage: "clock") }
         }
+        .environmentObject(profileStore)
     }
 }
 

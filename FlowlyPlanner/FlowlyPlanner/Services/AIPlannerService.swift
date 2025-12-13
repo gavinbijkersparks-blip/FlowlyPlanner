@@ -68,10 +68,14 @@ final class AIPlannerService {
             return PlanEvent(id: UUID(), title: event.title, start: startDate, end: endDate, kind: kind)
         }
 
-        // Filter: verwijder AI-lessen (kind=lesson) of events (behalve examens) die exact over lessen heen vallen; behoud alle andere
+        // Filter: verwijder AI-lessen, AI-examens en AI-inlevermomenten (we gebruiken onze eigen varianten) en events die over lessen heen vallen
         let studyEvents = events.filter { event in
             if event.kind == .lesson { return false }
-            if event.kind != .exam && overlapsLesson(event, lessons: lessons) { return false }
+            if event.kind == .exam { return false } // gebruik lokale examen events voor consistentie
+            if event.kind == .homeworkDue { return false } // gebruik lokale inlevermomenten
+            if overlapsLesson(event, lessons: lessons) { return false }
+            // Blokken mogen niet tijdens lesuren vallen
+            if overlapsLesson(event, lessons: lessons) { return false }
             return true
         }
 
@@ -83,10 +87,22 @@ final class AIPlannerService {
         let originalLessons = lessons.map {
             PlanEvent(id: UUID(), title: $0.subject, start: $0.startTime, end: $0.endTime, kind: .lesson)
         }
+        // Voeg lokale examenmomenten toe (als de AI ze niet terugstuurt)
+        let examEvents = exams.map { exam in
+            let start = exam.examDate
+            let end = calendar.date(byAdding: .minute, value: 60, to: start) ?? start.addingTimeInterval(3600)
+            return PlanEvent(id: UUID(), title: "Toets – \(exam.subject)", start: start, end: end, kind: .exam)
+        }
+        // Voeg inlevermarkeringen voor huiswerk toe (5 min blok op deadline)
+        let homeworkDueEvents = homeworkTasks.map { task in
+            let end = calendar.date(byAdding: .minute, value: 5, to: task.deadline) ?? task.deadline
+            return PlanEvent(id: UUID(), title: "Inleveren - \(task.subject) huiswerk", start: task.deadline, end: end, kind: .homeworkDue)
+        }
 
-        let combinedEvents = (studyEvents + originalLessons).sorted { $0.start < $1.start }
-        let weekStart = startOfWeek(from: combinedEvents.map { $0.start }.min() ?? Date())
-        return PlannerResult(plan: WeekPlan(weekStart: weekStart, events: combinedEvents, unplanned: aiResponse.warnings ?? []))
+        let combinedEvents = studyEvents + examEvents + homeworkDueEvents + originalLessons
+        let deduped = deduplicateAndResolveOverlaps(combinedEvents)
+        let weekStart = startOfWeek(from: deduped.map { $0.start }.min() ?? Date())
+        return PlannerResult(plan: WeekPlan(weekStart: weekStart, events: deduped, unplanned: aiResponse.warnings ?? []))
     }
 
     private func buildPayload(
@@ -143,6 +159,7 @@ final class AIPlannerService {
         switch kind.lowercased() {
         case "lesson", "les": return .lesson
         case "homework": return .homework
+        case "homeworkdue", "due", "inleveren": return .homeworkDue
         case "study": return .study
         case "exam", "toets": return .exam
         case "break": return .breakTime
@@ -167,6 +184,28 @@ final class AIPlannerService {
             if overlaps { return true }
         }
         return false
+    }
+
+    private func deduplicateAndResolveOverlaps(_ events: [PlanEvent]) -> [PlanEvent] {
+        var seen: Set<String> = []
+        var result: [PlanEvent] = []
+        // Sorteer eerst chronologisch
+        let sorted = events.sorted { $0.start < $1.start }
+        for event in sorted {
+            let key = "\(event.kind)-\(event.title)-\(event.start.timeIntervalSince1970)-\(event.end.timeIntervalSince1970)"
+            if seen.contains(key) { continue }
+            // Voorkom overlap met al geplaatste niet-les events
+            if event.kind != .lesson {
+                let overlapsExisting = result.contains { existing in
+                    guard existing.kind != .lesson else { return false }
+                    return event.start < existing.end && event.end > existing.start
+                }
+                if overlapsExisting { continue }
+            }
+            seen.insert(key)
+            result.append(event)
+        }
+        return result
     }
 }
 
